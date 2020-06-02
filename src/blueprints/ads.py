@@ -9,6 +9,7 @@ from flask.views import MethodView
 from database import db
 from services.users import UsersService
 from services.ads import AdsService
+from services.ads import AdService
 from services.colors import ColorsService
 
 bp = Blueprint('ads', __name__)
@@ -17,53 +18,44 @@ bp = Blueprint('ads', __name__)
 class AdsView(MethodView):
 	def get(self, user_id=None):
 		with db.connection as con:
-			query = f'SELECT * ' \
-			        f'FROM ad '
-			if user_id is not None:
-				seller_id = user_id
-				query += f'WHERE seller_id = {seller_id}'
-			cur = con.execute(query)
-			ads = [dict(row) for row in cur.fetchall()]
+			service_ads = AdsService(con)
+			service_ad = AdService(con)
+			ads = service_ads.get_ads(user_id)
+
 			for ad in ads:
 				ad_id = ad['id']
-				cur = con.execute(
-					f'SELECT tag_id '
-					f'FROM adtag '
-					f'WHERE ad_id = {ad_id}'
-				)
-				tags_id = [dict(row)['tag_id'] for row in cur.fetchall()]
+				tags_id = service_ads.get_tags_id(ad_id=ad_id)
 
-				tags = []
-				for tag_id in tags_id:
-					cur = con.execute(
-						f'SELECT name '
-						f'FROM tag '
-						f'WHERE id = {tag_id}'
-					)
-					tags.append(dict(cur.fetchone())['name'])
+				tags = service_ad.get_tags(tags_id)
 
 				ad.update({'tags': tags})
+
 				car_id = ad.pop('car_id')
-				cur = con.execute(
-					f'SELECT make, model, mileage, num_owners, reg_number '
-					f'FROM car '
-					f'WHERE id = {car_id}'
-				)
-				car = dict(cur.fetchone())
-				cur = con.execute(
-					f'SELECT color_id '
-					f'FROM carcolor '
-					f'WHERE car_id = {car_id}'
-				)
-				colors_id = [dict(row)['color_id'] for row in cur.fetchall()]
+				car = service_ad.get_car(car_id)
+				# cur = con.execute(
+				# 	f'SELECT make, model, mileage, num_owners, reg_number '
+				# 	f'FROM car '
+				# 	f'WHERE id = {car_id}'
+				# )
+				# car = dict(cur.fetchone())
+				# cur = con.execute(
+				# 	f'SELECT color_id '
+				# 	f'FROM carcolor '
+				# 	f'WHERE car_id = {car_id}'
+				# )
+				# colors_id = [dict(row)['color_id'] for row in cur.fetchall()]
+				colors_id = service_ad.get_car_color(car_id)
 				colors = []
 				for color_id in colors_id:
-					cur = con.execute(
-						f'SELECT * '
-						f'FROM color '
-						f'WHERE id = {color_id} '
-					)
-					colors.append(dict(cur.fetchone()))
+					color = ColorsService(con).get_color(id=color_id)
+					colors += color
+				# for color_id in colors_id:
+				# 	cur = con.execute(
+				# 		f'SELECT * '
+				# 		f'FROM color '
+				# 		f'WHERE id = {color_id} '
+				# 	)
+				# 	colors.append(dict(cur.fetchone()))
 				car['colors'] = colors
 
 				ad.update({'car': car})
@@ -106,7 +98,7 @@ class AdsView(MethodView):
 			response.update({'date': date})
 
 			service_ad.add_tag(tags)
-			tags_id = service_ad.get_tags(tags)
+			tags_id = service_ad.get_tags_id(tags=tags)
 
 			colors = []
 			service_ad.set_car_color(colors_id, car_id)
@@ -132,59 +124,29 @@ class AdsView(MethodView):
 class AdView(MethodView):
 	def get(self, ad_id):
 		with db.connection as con:
+
 			response = {'id': ad_id}
-			cur = con.execute(
-				f'SELECT date, title, seller_id, car_id '
-				f'FROM ad '
-				f'WHERE id = {ad_id}'
-			)
-			ad = cur.fetchone()
-			if not ad:
-				return '', 400
-			response.update(dict(ad))
-			cur = con.execute(
-				f'SELECT tag_id '
-				f'FROM adtag '
-				f'WHERE ad_id = {ad_id}'
-			)
-			tags_id = [dict(row) for row in cur.fetchall()]
-			tags = []
-			for tag_id in tags_id:
-				cur = con.execute(
-					f'SELECT name '
-					f'FROM tag '
-					f'WHERE id = {tag_id["tag_id"]}'
-				)
-				tags.append(dict(cur.fetchone())['name'])
-			response['tas'] = tags
+			service = AdService(con)
+			ad = service.get_ad(ad_id)
+			if ad is None:
+				return '', 404
+			response.update(ad)
+
+			tags_id = AdsService(con).get_tags_id(ad_id=ad_id)
+			tags = service.get_tags(tags_id)
+			response['tags'] = tags
+
 			car_id = response.pop('car_id')
-			cur = con.execute(
-				f'SELECT make, model, mileage, num_owners, reg_number '
-				f'FROM car '
-				f'WHERE id = {car_id}'
-			)
-			car = dict(cur.fetchone())
-			cur = con.execute(
-				f'SELECT color_id '
-				f'FROM carcolor '
-				f'WHERE car_id = {car_id}'
-			)
-			colors_id = [dict(row) for row in cur.fetchall()]
+			car = service.get_car(car_id)
+
+			colors_id = service.get_car_color(car_id)
 			colors = []
 			for color_id in colors_id:
-				cur = con.execute(
-					f'SELECT * '
-					f'FROM color '
-					f'WHERE id = {color_id["color_id"]}'
-				)
-				colors.append(dict(cur.fetchone()))
+				color = ColorsService(con).get_color(id=color_id)
+				colors += color
 			car['colors'] = colors
-			cur = con.execute(
-				f'SELECT title, url '
-				f'FROM image '
-				f'WHERE car_id = {car_id}'
-			)
-			images = [dict(row) for row in cur.fetchall()]
+
+			images = service.get_images(car_id)
 			car['images'] = images
 			response['car'] = car
 			return jsonify(response), 200

@@ -17,3 +17,4 @@ class ColorsService:
 			query += f'WHERE id = {id}'
 		cur = self.connection.execute(query)
 		return [dict(row) for row in cur]
+

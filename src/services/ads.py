@@ -34,15 +34,23 @@ class AdsService:
 				f'VALUES ("{tag}")'
 			)
 
-	def get_tags(self, tags):
+	def get_tags_id(self, tags=None, ad_id=None):
 		tags_id = []
-		for tag in tags:
+		if tags is not None:
+			for tag in tags:
+				cur = self.connection.execute(
+					f'SELECT id '
+					f'FROM tag '
+					f'WHERE name = "{tag}"'
+				)
+				tags_id.append(dict(cur.fetchone())['id'])
+		if ad_id is not None:
 			cur = self.connection.execute(
-				f'SELECT id '
-				f'FROM tag '
-				f'WHERE name = "{tag}"'
+				f'SELECT tag_id '
+				f'FROM adtag '
+				f'WHERE ad_id = {ad_id}'
 			)
-			tags_id.append(dict(cur.fetchone())['id'])
+			tags_id = [dict(row)['tag_id'] for row in cur.fetchall()]
 		return tags_id
 
 	def set_car_color(self, colors_id, car_id):
@@ -67,7 +75,76 @@ class AdsService:
 				f'VALUES ({tag_id}, {ad_id})'
 			)
 
+	def get_ads(self, seller_id=None):
+		query = f'SELECT * ' \
+		        f'FROM ad '
+		if seller_id is not None:
+			query += f'WHERE seller_id = {seller_id}'
+		cur = self.connection.execute(query)
+		return [dict(row) for row in cur.fetchall()]
+
+
+class AdService:
+	def __init__(self, connection):
+		self.connection = connection
+
 	def get_ad(self, ad_id):
-		pass
+		cur = self.connection.execute(
+			f'SELECT date, title, seller_id, car_id '
+			f'FROM ad '
+			f'WHERE id = {ad_id}'
+		)
+		try:
+			ad = cur.fetchone()
+		except:
+			return None
+		return dict(ad)
+
+	# def get_ad_tags(self, ad_id):
+	# 	cur = self.connection.execute(
+	# 		f'SELECT tag_id '
+	# 		f'FROM adtag '
+	# 		f'WHERE ad_id = {ad_id}'
+	# 	)
+	# 	try:
+	# 		tags_id = [dict(row) for row in cur.fetchall()]
+	# 	except:
+	# 		return []
+	# 	return tags_id
+
+	def get_tags(self, tags_id):
+		tags = []
+		for tag_id in tags_id:
+			cur = self.connection.execute(
+				f'SELECT name '
+				f'FROM tag '
+				f'WHERE id = {tag_id}'
+			)
+			tags.append(dict(cur.fetchone())['name'])
+		return tags
+
+	def get_car(self, car_id):
+		cur = self.connection.execute(
+			f'SELECT make, model, mileage, num_owners, reg_number '
+			f'FROM car '
+			f'WHERE id = {car_id}'
+		)
+		return dict(cur.fetchone())
+
+	def get_car_color(self, car_id):
+		cur = self.connection.execute(
+			f'SELECT color_id '
+			f'FROM carcolor '
+			f'WHERE car_id = {car_id}'
+		)
+		return [dict(row)['color_id'] for row in cur.fetchall()]
+
+	def get_images(self, car_id):
+		cur = self.connection.execute(
+			f'SELECT title, url '
+			f'FROM image '
+			f'WHERE car_id = {car_id}'
+		)
+		return [dict(row) for row in cur.fetchall()]
 
 
