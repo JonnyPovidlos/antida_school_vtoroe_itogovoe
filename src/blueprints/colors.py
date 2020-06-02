@@ -7,7 +7,7 @@ from flask import (
 from flask.views import MethodView
 from database import db
 from services.colors import ColorsService
-from services.users import UserService
+from services.users import UsersService
 
 bp = Blueprint('colors', __name__)
 
@@ -31,7 +31,7 @@ class ColorsView(MethodView):
 		if not name or not hex:
 			return '', 400
 		with db.connection as con:
-			user_service = UserService(con)
+			user_service = UsersService(con)
 			is_seller = user_service.account_is_seller(account_id)
 			if not is_seller:
 				return '', 403

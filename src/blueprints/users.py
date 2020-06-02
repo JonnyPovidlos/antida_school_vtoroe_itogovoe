@@ -7,8 +7,8 @@ from flask import (
 from flask.views import MethodView
 from services.users import (
 	UsersService,
-	UserService
 )
+from services.cities import CitiesService
 from database import db
 
 bp = Blueprint('users', __name__)
@@ -32,34 +32,36 @@ class UsersView(MethodView):
 			service = UsersService(con)
 			account_id = service.create_account(first_name, last_name, email, password)
 			if not account_id:
-				return f'Аккаунт с таким email уже создан'
+				return '', 404
 			if is_seller:
-				account_id = service.create_seller(email, phone, zip_code, city_id, street, home)
-			response = service.get_user(account_id, is_seller)
-			return jsonify(response)
+				CitiesService(con).create_zip_code(
+					zip_code=zip_code,
+					city_id=city_id
+				)
+				service.create_seller(account_id, phone, zip_code, street, home)
+		response = service.get_user(account_id, is_seller)
+		return jsonify(response)
 
 
 class UserView(MethodView):
 	def get(self, account_id):
-		if not session.get('user_id', None):
+		if not session.get('user_id', ):
 			return '', 401
 		with db.connection as con:
-			service = UserService(con)
-			account = service.get_account(account_id)
+			service = UsersService(con)
 			is_seller = service.account_is_seller(account_id)
-			if is_seller:
-				seller = service.get_seller(account_id)
-				account.update(seller)
-			print(account)
+			account = service.get_user(account_id, is_seller)
+			if not account:
+				return '', 404
 		return jsonify(account), 200
 
 	def patch(self, account_id):
 		def update_data(data_dict, key, req_json):
-			if req_json.get(key, None):
+			if req_json.get(key):
 				data_dict.update({key: req_json[key]})
 			return data_dict
 
-		if not session.get('user_id', None):
+		if not session.get('user_id'):
 			return '', 401
 
 		if account_id != session['user_id']:
@@ -67,59 +69,46 @@ class UserView(MethodView):
 
 		request_json = request.json
 		with db.connection as con:
-			service = UserService(con)
+			service = UsersService(con)
 
 			account_update = dict()
-			account_update = update_data(account_update, 'first_name', request_json)
-			account_update = update_data(account_update, 'last_name', request_json)
-			for key, value in account_update.items():
-				con.execute(
-					f'UPDATE account '
-					f'SET {key} = "{value}" '
-					f'WHERE id = {account_id} '
-				)
-			is_seller_update = request_json.get('is_seller', None)
+			update_data(account_update, 'first_name', request_json)
+			update_data(account_update, 'last_name', request_json)
+
+			service.update_account(account_id, account_update)
+
+			is_seller_update = request_json.get('is_seller')
+			is_seller = service.account_is_seller(account_id)
 			if is_seller_update is not None:
-				is_seller = service.account_is_seller(account_id)
-				if is_seller_update:
+				if is_seller_update is True:
 					seller_update = dict()
 					zipcode_update = dict()
-					seller_update.update(update_data(seller_update, 'phone', request_json))
-					seller_update.update(update_data(seller_update, "zip_code", request_json))
-					zipcode_update.update(update_data(zipcode_update, "zip_code", request_json))
-					seller_update.update(update_data(seller_update, "street", request_json))
-					zipcode_update.update(update_data(zipcode_update, "city_id", request_json))
-					seller_update.update(update_data(seller_update, "home", request_json))
-					if not is_seller:
-						cur = con.execute(
-							f'SELECT email '
-							f'FROM account '
-							f'WHERE id = {account_id} '
-						)
-						email = dict(cur.fetchone())['email']
-						UsersService(con).create_seller(email=email,
-						                                city_id=seller_update['city_id'],
-						                                zip_code=zipcode_update['zip_code'],
-						                                home=seller_update['home'],
-						                                phone=seller_update['phone'],
-						                                street=seller_update['street']
-						                                )
-						return jsonify(UsersService(con).get_user(account_id, is_seller_update)), 200
-					else:
-						con.execute(
-							f'INSERT OR IGNORE INTO zipcode (zip_code, city_id) '
-							f'VALUES ({zipcode_update["zip_code"]}, {zipcode_update["city_id"]})'
-						)
+					update_data(seller_update, 'phone', request_json)
+					update_data(seller_update, "zip_code", request_json)
+					update_data(seller_update, "street", request_json)
+					update_data(seller_update, "home", request_json)
+					update_data(zipcode_update, "zip_code", request_json)
+					update_data(zipcode_update, "city_id", request_json)
 
-						for key, value in seller_update.items():
-							con.execute(
-								f'UPDATE seller '
-								f'SET {key} = "{value}" '
-								f'WHERE account_id = {account_id}'
-							)
+					CitiesService(con).create_zip_code(
+						zip_code=zipcode_update['zip_code'],
+						city_id=zipcode_update['city_id']
+					)
+					if is_seller is False:
+						service.create_seller(
+							account_id=account_id,
+							zip_code=zipcode_update['zip_code'],
+							home=seller_update['home'],
+							phone=seller_update['phone'],
+							street=seller_update['street']
+						)
+						user = service.get_user(account_id, is_seller_update)
+						return jsonify(user), 200
+					else:
+						service.update_seller(account_id, seller_update)
 						return jsonify(UsersService(con).get_user(account_id, is_seller_update)), 200
 				else:
-					if is_seller:
+					if is_seller is True:
 						with db.connection as con:
 							cur = con.execute(
 								f'SELECT * '
@@ -149,7 +138,8 @@ class UserView(MethodView):
 									f'DELETE FROM seller '
 									f'WHERE account_id = {account_id}'
 								)
-					return jsonify(UsersService(con).get_user(account_id, is_seller_update)), 200
+			is_seller_update = is_seller
+			return jsonify(UsersService(con).get_user(account_id, is_seller_update)), 200
 
 
 bp.add_url_rule('/', view_func=UsersView.as_view('users'))

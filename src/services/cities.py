@@ -17,3 +17,9 @@ class CitiesService:
 		self.connection.execute(query)
 		self.connection.commit()
 
+	def create_zip_code(self, zip_code, city_id):
+		self.connection.execute(
+			f'INSERT OR IGNORE INTO zipcode (zip_code, city_id) '
+			f'VALUES ({zip_code}, {city_id})'
+		)
+

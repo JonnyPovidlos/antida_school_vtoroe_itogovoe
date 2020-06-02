@@ -7,37 +7,19 @@ from flask import (
 import datetime
 from flask.views import MethodView
 from database import db
-from services.users import UserService
+from services.users import UsersService
+from services.ads import AdsService
+from services.colors import ColorsService
 
 bp = Blueprint('ads', __name__)
 
 
 class AdsView(MethodView):
 	def get(self, user_id=None):
-		request_params = request.args
-		request_tags = request_params.get('tags', None)
-		request_make = request_params.get('make', None)
-		request_model = request_params.get('model', None)
-		request_seller_id = request_params.get('seller_id', None)
-		response = []
-		if request_tags:
-			request_tags = request_tags.split(',')
-		if request_make:
-			request_make = request_make.split(',')
-		if request_model:
-			request_model = request_make.split(',')
-		if request_seller_id:
-			request_seller_id = int(request_seller_id)
-
-
 		with db.connection as con:
 			query = f'SELECT * ' \
 			        f'FROM ad '
-			if user_id is None:
-				if request_seller_id:
-					seller_id = request_seller_id
-					query += f'WHERE seller_id = {seller_id}'
-			else:
+			if user_id is not None:
 				seller_id = user_id
 				query += f'WHERE seller_id = {seller_id}'
 			cur = con.execute(query)
@@ -85,22 +67,7 @@ class AdsView(MethodView):
 				car['colors'] = colors
 
 				ad.update({'car': car})
-				tags_eq = True
-				make_eq = True
-				model_eq = True
-
-				if request_tags:
-					if set(ad['tags']) != set(request_tags):
-						tags_eq = False
-				if request_make:
-					if set(request_make) != {car['make']}:
-						make_eq = False
-				if request_model:
-					if set(request_model) != {car['model']}:
-						model_eq = False
-				if tags_eq and make_eq and model_eq:
-					response.append(ad)
-			return jsonify(response), 200
+			return jsonify(ads), 200
 
 	def post(self, user_id=None):
 		if not session.get('user_id', None):
@@ -110,7 +77,8 @@ class AdsView(MethodView):
 		account_id = session['user_id']
 
 		with db.connection as con:
-			service = UserService(con)
+			service = UsersService(con)
+			service_ad = AdsService(con)
 			is_seller = service.account_is_seller(account_id)
 			if not is_seller:
 				return '', 403
@@ -118,64 +86,46 @@ class AdsView(MethodView):
 			response = dict()
 			title = request_json['title']
 			tags = request_json['tags']
-
 			car = request_json['car']
 			colors_id = car['colors']
 			images = car['images']
 			car.setdefault('num_owners', 1)
-			response.update({'title': title, 'tags': tags, 'seller_id': account_id, 'is_seller': is_seller})
-			cur = con.execute(
-				f'INSERT INTO car (make, model, mileage, num_owners, reg_number) '
-				f'VALUES '
-				f'("{car["make"]}", "{car["model"]}", "{car["mileage"]}", "{car["num_owners"]}", "{car["reg_number"]}")'
-			)
-			car_id = cur.lastrowid
-			for image in images:
-				con.execute(
-					f'INSERT INTO image (title, url, car_id)'
-					f'VALUES ("{image["title"]}", "{image["url"]}", {car_id})'
-				)
 
-			car['images'] = images
+			response.update(
+				{
+					'title': title,
+					'tags': tags,
+					'seller_id': account_id,
+					'is_seller': is_seller
+				}
+			)
+			car_id = service_ad.create_car(car)
+			service_ad.add_images(images, car_id)
+
 			date = datetime.datetime.now().strftime('%Y-%m-%d')
 			response.update({'date': date})
-			tags_id = []
-			print(car_id)
-			for tag in tags:
-				con.execute(
-					f'INSERT OR IGNORE INTO tag (name)'
-					f'VALUES ("{tag}")'
-				)
-				cur = con.execute(
-					f'SELECT id '
-					f'FROM tag '
-					f'WHERE name = "{tag}"'
-				)
-				tags_id.append(dict(cur.fetchone())['id'])
+
+			service_ad.add_tag(tags)
+			tags_id = service_ad.get_tags(tags)
+
 			colors = []
+			service_ad.set_car_color(colors_id, car_id)
+			service_color = ColorsService(con)
 			for color_id in colors_id:
-				con.execute(
-					f'INSERT INTO carcolor (color_id, car_id) '
-					f'VALUES ({color_id}, {car_id})'
-				)
-				cur = con.execute(
-					f'SELECT * '
-					f'FROM color '
-					f'WHERE id = {color_id}'
-				)
-				colors.append(dict(cur.fetchone()))
+				color = service_color.get_color(id=color_id)
+				colors += (color)
 			car['colors'] = colors
+
 			response.update({'car': car})
-			cur = con.execute(
-				f'INSERT INTO ad (title, date, seller_id, car_id) '
-				f'VALUES ("{title}", "{date}", {account_id}, {car_id})'
+
+			ad_id = service_ad.create_ad(
+				title=title,
+				date=date,
+				account_id=account_id,
+				car_id=car_id
 			)
-			ad_id = cur.lastrowid
-			for tag_id in tags_id:
-				con.execute(
-					f'INSERT INTO adtag (tag_id, ad_id) '
-					f'VALUES ({tag_id}, {ad_id})'
-				)
+			response.update({'id': ad_id})
+			service_ad.set_ad_tag(ad_id, tags_id)
 			return jsonify(response), 201
 
 
@@ -274,6 +224,20 @@ class AdView(MethodView):
 				f'WHERE id = {ad_id}'
 			)
 			return f'', 204
+
+	def patch(self, ad_id):
+		request_json = request.json
+		title = request_json.get('title')
+		tags = request_json.get('tags')
+		car = request_json.get('car')
+		with db.connection as con:
+			if title:
+				con.execute(
+					f'UPDATE ad'
+					f'SET title = "{title}"'
+					f'WHERE id = {ad_id}'
+				)
+		return '', 200
 
 
 bp.add_url_rule('/ads', view_func=AdsView.as_view('ads'))
