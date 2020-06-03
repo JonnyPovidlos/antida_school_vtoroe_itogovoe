@@ -9,7 +9,6 @@ from flask.views import MethodView
 from database import db
 from services.users import UsersService
 from services.ads import AdsService
-from services.ads import AdService
 from services.colors import ColorsService
 
 bp = Blueprint('ads', __name__)
@@ -18,48 +17,48 @@ bp = Blueprint('ads', __name__)
 class AdsView(MethodView):
 	def get(self, user_id=None):
 		with db.connection as con:
+			qs = dict()
 			service_ads = AdsService(con)
-			service_ad = AdService(con)
 			ads = service_ads.get_ads(user_id)
-
+			response = dict()
 			for ad in ads:
 				ad_id = ad['id']
 				tags_id = service_ads.get_tags_id(ad_id=ad_id)
-
-				tags = service_ad.get_tags(tags_id)
-
+				tags = service_ads.get_tags(tags_id)
 				ad.update({'tags': tags})
-
 				car_id = ad.pop('car_id')
-				car = service_ad.get_car(car_id)
-				# cur = con.execute(
-				# 	f'SELECT make, model, mileage, num_owners, reg_number '
-				# 	f'FROM car '
-				# 	f'WHERE id = {car_id}'
-				# )
-				# car = dict(cur.fetchone())
-				# cur = con.execute(
-				# 	f'SELECT color_id '
-				# 	f'FROM carcolor '
-				# 	f'WHERE car_id = {car_id}'
-				# )
-				# colors_id = [dict(row)['color_id'] for row in cur.fetchall()]
-				colors_id = service_ad.get_car_color(car_id)
+				car = service_ads.get_car(car_id)
+				colors_id = service_ads.get_car_color(car_id)
 				colors = []
 				for color_id in colors_id:
 					color = ColorsService(con).get_color(id=color_id)
 					colors += color
-				# for color_id in colors_id:
-				# 	cur = con.execute(
-				# 		f'SELECT * '
-				# 		f'FROM color '
-				# 		f'WHERE id = {color_id} '
-				# 	)
-				# 	colors.append(dict(cur.fetchone()))
 				car['colors'] = colors
-
 				ad.update({'car': car})
-			return jsonify(ads), 200
+
+				tags_equals = True
+				make_equals = True
+				model_equals = True
+				seller_equals = True
+				if 'tags' in request.args:
+					qs['tags'] = [tag.strip() for tag in request.args['tags'].split(',')]
+					if set(tags) != set(qs['tags']):
+						tags_equals = False
+				if 'make' in request.args:
+					qs['make'] = request.args['make'].strip()
+					if car['make'] != qs['make']:
+						make_equals = False
+				if 'model' in request.args:
+					qs['model'] = request.args['model'].strip()
+					if car['model'] != qs['model']:
+						model_equals = False
+				if 'seller_id' in request.args:
+					qs['seller_id'] = int(request.args['seller_id'])
+					if ad['seller_id'] != qs['seller_id']:
+						seller_equals = False
+				if tags_equals and make_equals and model_equals and seller_equals:
+					response.update(ad)
+			return jsonify(response), 200
 
 	def post(self, user_id=None):
 		if not session.get('user_id', None):
@@ -70,7 +69,7 @@ class AdsView(MethodView):
 
 		with db.connection as con:
 			service = UsersService(con)
-			service_ad = AdsService(con)
+			service_ads = AdsService(con)
 			is_seller = service.account_is_seller(account_id)
 			if not is_seller:
 				return '', 403
@@ -91,33 +90,33 @@ class AdsView(MethodView):
 					'is_seller': is_seller
 				}
 			)
-			car_id = service_ad.create_car(car)
-			service_ad.add_images(images, car_id)
+			car_id = service_ads.create_car(car)
+			service_ads.add_images(images, car_id)
 
 			date = datetime.datetime.now().strftime('%Y-%m-%d')
 			response.update({'date': date})
 
-			service_ad.add_tag(tags)
-			tags_id = service_ad.get_tags_id(tags=tags)
+			service_ads.add_tag(tags)
+			tags_id = service_ads.get_tags_id(tags=tags)
 
 			colors = []
-			service_ad.set_car_color(colors_id, car_id)
+			service_ads.set_car_color(colors_id, car_id)
 			service_color = ColorsService(con)
 			for color_id in colors_id:
 				color = service_color.get_color(id=color_id)
-				colors += (color)
+				colors += color
 			car['colors'] = colors
 
 			response.update({'car': car})
 
-			ad_id = service_ad.create_ad(
+			ad_id = service_ads.create_ad(
 				title=title,
 				date=date,
 				account_id=account_id,
 				car_id=car_id
 			)
 			response.update({'id': ad_id})
-			service_ad.set_ad_tag(ad_id, tags_id)
+			service_ads.set_ad_tag(ad_id, tags_id)
 			return jsonify(response), 201
 
 
@@ -126,13 +125,13 @@ class AdView(MethodView):
 		with db.connection as con:
 
 			response = {'id': ad_id}
-			service = AdService(con)
+			service = AdsService(con)
 			ad = service.get_ad(ad_id)
 			if ad is None:
 				return '', 404
 			response.update(ad)
 
-			tags_id = AdsService(con).get_tags_id(ad_id=ad_id)
+			tags_id = service.get_tags_id(ad_id=ad_id)
 			tags = service.get_tags(tags_id)
 			response['tags'] = tags
 
@@ -188,17 +187,31 @@ class AdView(MethodView):
 			return f'', 204
 
 	def patch(self, ad_id):
+
+		def update_data(data_dict, key, req_json):
+			if req_json.get(key):
+				data_dict.update({key: req_json[key]})
+			return data_dict
+
+
 		request_json = request.json
 		title = request_json.get('title')
 		tags = request_json.get('tags')
 		car = request_json.get('car')
 		with db.connection as con:
+			service = AdsService(con)
 			if title:
 				con.execute(
 					f'UPDATE ad'
 					f'SET title = "{title}"'
 					f'WHERE id = {ad_id}'
 				)
+			if tags:
+				tags_id = service.get_tags_id(tags=tags)
+				service.delete_ad_tags(ad_id)
+				service.set_ad_tag(ad_id, tags_id)
+			# if car:
+
 		return '', 200
 
 

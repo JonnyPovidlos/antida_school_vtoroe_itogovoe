@@ -2,6 +2,14 @@ class AdsService:
 	def __init__(self, connection):
 		self.connection = connection
 
+	# def _build_ads_query(self, filters):
+	# 	SELECT = 'SELECT ad.* '
+	# 	FROM = 'FROM ad '
+	# 	WHERE = ''
+	# 	if filters.get('tags'):
+	# 		FROM += f'JOIN adtag ON ad.id = adtag.ad_id '
+	# 		f' AND '.join(filters['tag'])
+
 	def create_car(self, car):
 		make = car['make']
 		model = car['model']
@@ -76,41 +84,19 @@ class AdsService:
 			)
 
 	def get_ads(self, seller_id=None):
-		query = f'SELECT * ' \
+		query = f'SELECT ad.*  ' \
 		        f'FROM ad '
 		if seller_id is not None:
-			query += f'WHERE seller_id = {seller_id}'
+			query += f'WHERE seller_id = {seller_id} '
 		cur = self.connection.execute(query)
 		return [dict(row) for row in cur.fetchall()]
 
-
-class AdService:
-	def __init__(self, connection):
-		self.connection = connection
-
-	def get_ad(self, ad_id):
-		cur = self.connection.execute(
-			f'SELECT date, title, seller_id, car_id '
-			f'FROM ad '
-			f'WHERE id = {ad_id}'
+	def delete_ad_tags(self, ad_id):
+		self.connection.execute(
+			f'DELETE FROM adtag '
+			f'WHERE ad_id = {ad_id}'
 		)
-		try:
-			ad = cur.fetchone()
-		except:
-			return None
-		return dict(ad)
 
-	# def get_ad_tags(self, ad_id):
-	# 	cur = self.connection.execute(
-	# 		f'SELECT tag_id '
-	# 		f'FROM adtag '
-	# 		f'WHERE ad_id = {ad_id}'
-	# 	)
-	# 	try:
-	# 		tags_id = [dict(row) for row in cur.fetchall()]
-	# 	except:
-	# 		return []
-	# 	return tags_id
 
 	def get_tags(self, tags_id):
 		tags = []
@@ -146,5 +132,81 @@ class AdService:
 			f'WHERE car_id = {car_id}'
 		)
 		return [dict(row) for row in cur.fetchall()]
+
+	def get_ad(self, ad_id):
+		cur = self.connection.execute(
+			f'SELECT date, title, seller_id, car_id '
+			f'FROM ad '
+			f'WHERE id = {ad_id}'
+		)
+		try:
+			ad = cur.fetchone()
+		except:
+			return None
+		return dict(ad)
+
+
+# class AdService:
+# 	def __init__(self, connection):
+# 		self.connection = connection
+
+	# def get_ad(self, ad_id):
+	# 	cur = self.connection.execute(
+	# 		f'SELECT date, title, seller_id, car_id '
+	# 		f'FROM ad '
+	# 		f'WHERE id = {ad_id}'
+	# 	)
+	# 	try:
+	# 		ad = cur.fetchone()
+	# 	except:
+	# 		return None
+	# 	return dict(ad)
+
+	# def get_ad_tags(self, ad_id):
+	# 	cur = self.connection.execute(
+	# 		f'SELECT tag_id '
+	# 		f'FROM adtag '
+	# 		f'WHERE ad_id = {ad_id}'
+	# 	)
+	# 	try:
+	# 		tags_id = [dict(row) for row in cur.fetchall()]
+	# 	except:
+	# 		return []
+	# 	return tags_id
+
+	# def get_tags(self, tags_id):
+	# 	tags = []
+	# 	for tag_id in tags_id:
+	# 		cur = self.connection.execute(
+	# 			f'SELECT name '
+	# 			f'FROM tag '
+	# 			f'WHERE id = {tag_id}'
+	# 		)
+	# 		tags.append(dict(cur.fetchone())['name'])
+	# 	return tags
+	#
+	# def get_car(self, car_id):
+	# 	cur = self.connection.execute(
+	# 		f'SELECT make, model, mileage, num_owners, reg_number '
+	# 		f'FROM car '
+	# 		f'WHERE id = {car_id}'
+	# 	)
+	# 	return dict(cur.fetchone())
+	#
+	# def get_car_color(self, car_id):
+	# 	cur = self.connection.execute(
+	# 		f'SELECT color_id '
+	# 		f'FROM carcolor '
+	# 		f'WHERE car_id = {car_id}'
+	# 	)
+	# 	return [dict(row)['color_id'] for row in cur.fetchall()]
+	#
+	# def get_images(self, car_id):
+	# 	cur = self.connection.execute(
+	# 		f'SELECT title, url '
+	# 		f'FROM image '
+	# 		f'WHERE car_id = {car_id}'
+	# 	)
+	# 	return [dict(row) for row in cur.fetchall()]
 
 
