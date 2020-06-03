@@ -187,6 +187,8 @@ class AdView(MethodView):
 			return f'', 204
 
 	def patch(self, ad_id):
+		if not session.get('user_id', None):
+			return '', 401
 
 		def update_data(data_dict, key, req_json):
 			if req_json.get(key):
@@ -200,17 +202,41 @@ class AdView(MethodView):
 		car = request_json.get('car')
 		with db.connection as con:
 			service = AdsService(con)
+			ad = service.get_ad(ad_id)
+			if ad:
+				if ad['seller_id'] != session['user_id']:
+					return '', 403
+			else:
+				return '', 404
+
 			if title:
-				con.execute(
-					f'UPDATE ad'
-					f'SET title = "{title}"'
-					f'WHERE id = {ad_id}'
-				)
+				service.update_title(ad_id, title)
 			if tags:
 				tags_id = service.get_tags_id(tags=tags)
 				service.delete_ad_tags(ad_id)
 				service.set_ad_tag(ad_id, tags_id)
-			# if car:
+			if car:
+				car_update = dict()
+				colors_update = dict()
+				images_update = dict()
+				update_data(car_update, 'make', car)
+				update_data(car_update, 'model', car)
+				update_data(colors_update, 'colors', car)
+				update_data(car_update, 'mileage', car)
+				update_data(car_update, 'num_owners', car)
+				update_data(car_update, 'reg_number', car)
+				update_data(images_update, 'images', car)
+				car_id = ad['car_id']
+				if len(car_update):
+					service.update_car(car_id, car_update)
+				if len(colors_update):
+					colors_id = colors_update['colors']
+					service.delete_car_color(car_id)
+					service.set_car_color(colors_id, car_id)
+				if len(images_update):
+					images_update = images_update['images']
+					service.delete_images(car_id)
+					service.add_images(images_update, car)
 
 		return '', 200
 

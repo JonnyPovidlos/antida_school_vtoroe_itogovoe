@@ -133,6 +133,33 @@ class AdsService:
 		)
 		return [dict(row) for row in cur.fetchall()]
 
+	def update_title(self, ad_id, title):
+		self.connection.execute(
+			f'UPDATE ad'
+			f'SET title = "{title}"'
+			f'WHERE id = {ad_id}'
+		)
+
+	def update_car(self, car_id, car_update):
+		set_params = ', '.join(f'{key} = "{values}"' for key, values in car_update.items())
+		self.connection.execute(
+			f'UPDATE car '
+			f'SET {set_params} '
+			f'WHERE car_id = {car_id}'
+		)
+
+	def delete_car_color(self, car_id):
+		self.connection.execute(
+			f'DELETE FROM carcolor '
+			f'WHERE car_id = {car_id}'
+		)
+
+	def delete_images(self, car_id):
+		self.connection.execute(
+			f'DELETE FROM images '
+			f'WHERE car_id = {car_id}'
+		)
+
 	def get_ad(self, ad_id):
 		cur = self.connection.execute(
 			f'SELECT date, title, seller_id, car_id '
@@ -140,10 +167,10 @@ class AdsService:
 			f'WHERE id = {ad_id}'
 		)
 		try:
-			ad = cur.fetchone()
+			ad = dict(cur.fetchone())
 		except:
 			return None
-		return dict(ad)
+		return ad
 
 
 # class AdService:
