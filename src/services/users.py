@@ -56,18 +56,21 @@ class UsersService:
 
 	def update_account(self, account_id, update_account_data):
 		set_params = ', '.join(f'{key} = "{val}"' for key, val in update_account_data.items())
+
 		self.connection.execute(
 			f'UPDATE account '
-			f'SET {set_params}'
+			f'SET {set_params} '
 			f'WHERE id = {account_id} '
 		)
 
 	def update_seller(self, account_id, update_seller_data):
 		set_params = ', '.join(f'{key} = "{val}"' for key, val in update_seller_data.items())
+		print(set_params)
+		print(account_id)
 		self.connection.execute(
 			f'UPDATE seller '
 			f'SET {set_params}'
-			f'WHERE id = {account_id} '
+			f'WHERE account_id = {account_id} '
 		)
 
 # class UserService:

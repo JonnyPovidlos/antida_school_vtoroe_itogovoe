@@ -14,6 +14,10 @@ bp = Blueprint('colors', __name__)
 
 class ColorsView(MethodView):
 	def get(self):
+		account_id = session.get('user_id')
+		if not account_id:
+			return '', 401
+
 		with db.connection as con:
 			service = ColorsService(con)
 			colors = service.get_color()

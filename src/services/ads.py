@@ -2,14 +2,6 @@ class AdsService:
 	def __init__(self, connection):
 		self.connection = connection
 
-	# def _build_ads_query(self, filters):
-	# 	SELECT = 'SELECT ad.* '
-	# 	FROM = 'FROM ad '
-	# 	WHERE = ''
-	# 	if filters.get('tags'):
-	# 		FROM += f'JOIN adtag ON ad.id = adtag.ad_id '
-	# 		f' AND '.join(filters['tag'])
-
 	def create_car(self, car):
 		make = car['make']
 		model = car['model']
@@ -29,7 +21,6 @@ class AdsService:
 			keys = image.keys()
 			insert_str = ', '.join(f'{key}' for key in keys)
 			values = ', '.join(f'"{image[key]}"' for key in keys)
-
 			self.connection.execute(
 				f'INSERT INTO image ({insert_str}, car_id)'
 				f'VALUES ({values}, {car_id})'
@@ -41,6 +32,7 @@ class AdsService:
 				f'INSERT OR IGNORE INTO tag (name)'
 				f'VALUES ("{tag}")'
 			)
+			self.connection.commit()
 
 	def get_tags_id(self, tags=None, ad_id=None):
 		tags_id = []
@@ -145,7 +137,7 @@ class AdsService:
 		self.connection.execute(
 			f'UPDATE car '
 			f'SET {set_params} '
-			f'WHERE car_id = {car_id}'
+			f'WHERE id = {car_id}'
 		)
 
 	def delete_car_color(self, car_id):
@@ -156,7 +148,7 @@ class AdsService:
 
 	def delete_images(self, car_id):
 		self.connection.execute(
-			f'DELETE FROM images '
+			f'DELETE FROM image '
 			f'WHERE car_id = {car_id}'
 		)
 

@@ -20,7 +20,7 @@ class AdsView(MethodView):
 			qs = dict()
 			service_ads = AdsService(con)
 			ads = service_ads.get_ads(user_id)
-			response = dict()
+			response = []
 			for ad in ads:
 				ad_id = ad['id']
 				tags_id = service_ads.get_tags_id(ad_id=ad_id)
@@ -56,8 +56,10 @@ class AdsView(MethodView):
 					qs['seller_id'] = int(request.args['seller_id'])
 					if ad['seller_id'] != qs['seller_id']:
 						seller_equals = False
+				print(ad)
+				print(tags_equals, make_equals, model_equals, seller_equals)
 				if tags_equals and make_equals and model_equals and seller_equals:
-					response.update(ad)
+					response.append(ad)
 			return jsonify(response), 200
 
 	def post(self, user_id=None):
@@ -184,7 +186,7 @@ class AdView(MethodView):
 				f'DELETE FROM ad '
 				f'WHERE id = {ad_id}'
 			)
-			return f'', 204
+			return f'', 200
 
 	def patch(self, ad_id):
 		if not session.get('user_id', None):
@@ -212,6 +214,7 @@ class AdView(MethodView):
 			if title:
 				service.update_title(ad_id, title)
 			if tags:
+				service.add_tag(tags)
 				tags_id = service.get_tags_id(tags=tags)
 				service.delete_ad_tags(ad_id)
 				service.set_ad_tag(ad_id, tags_id)
@@ -236,7 +239,7 @@ class AdView(MethodView):
 				if len(images_update):
 					images_update = images_update['images']
 					service.delete_images(car_id)
-					service.add_images(images_update, car)
+					service.add_images(images_update, car_id)
 
 		return '', 200
 

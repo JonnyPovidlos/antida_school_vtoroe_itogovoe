@@ -22,9 +22,9 @@ def login():
 		service = AuthService(con)
 		user = service.get_user(email)
 		if not user:
-			return '', 403
+			return '', 401
 		if not check_password_hash(user['password'], password):
-			return '', 403
+			return '', 401
 		session['user_id'] = user['id']
 		return '', 200
 

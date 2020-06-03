@@ -28,12 +28,12 @@ class ImagesView(MethodView):
 
 		with db.connection as con:
 			is_seller = UsersService(con).account_is_seller(account_id)
-			if not is_seller:
+			if is_seller is False:
 				return '', 403
 			file = request.files.get('file')
 			filename = f'{uuid.uuid4()}{os.path.splitext(file.filename)[1]}'
 			file.save(os.path.join(self.UPLOAD_FOLDER, filename))
-			result = {'url': url_for('images.image', image_name=filename)}
+			result = {'url': url_for('images.image', image_name=filename, _external=True)}
 		return result, 200
 
 	def get(self, image_name):

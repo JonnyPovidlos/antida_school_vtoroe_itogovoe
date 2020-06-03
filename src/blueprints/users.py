@@ -32,7 +32,7 @@ class UsersView(MethodView):
 			service = UsersService(con)
 			account_id = service.create_account(first_name, last_name, email, password)
 			if not account_id:
-				return '', 404
+				return '', 400
 			if is_seller:
 				CitiesService(con).create_zip_code(
 					zip_code=zip_code,
@@ -74,8 +74,8 @@ class UserView(MethodView):
 			account_update = dict()
 			update_data(account_update, 'first_name', request_json)
 			update_data(account_update, 'last_name', request_json)
-
-			service.update_account(account_id, account_update)
+			if len(account_update):
+				service.update_account(account_id, account_update)
 
 			is_seller_update = request_json.get('is_seller')
 			is_seller = service.account_is_seller(account_id)
@@ -105,6 +105,7 @@ class UserView(MethodView):
 						user = service.get_user(account_id, is_seller_update)
 						return jsonify(user), 200
 					else:
+						print(seller_update)
 						service.update_seller(account_id, seller_update)
 						return jsonify(UsersService(con).get_user(account_id, is_seller_update)), 200
 				else:
@@ -134,10 +135,12 @@ class UserView(MethodView):
 									f'DELETE FROM ad '
 									f'WHERE seller_id = {account_id} '
 								)
-								con.execute(
-									f'DELETE FROM seller '
-									f'WHERE account_id = {account_id}'
-								)
+							print(account_id)
+							con.execute(
+								f'DELETE FROM seller '
+								f'WHERE account_id = {account_id}'
+							)
+							return jsonify(UsersService(con).get_user(account_id, is_seller_update)), 200
 			is_seller_update = is_seller
 			return jsonify(UsersService(con).get_user(account_id, is_seller_update)), 200
 
